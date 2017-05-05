@@ -37,8 +37,8 @@ END_MESSAGE_MAP()
 void CFileResTree::Initial()
 {	
 	//设置外观样式
-	LONG lStyle = GetWindowLong(this->m_hWnd, GWL_STYLE);
-	SetWindowLong(this->m_hWnd, GWL_STYLE, lStyle | TVS_HASBUTTONS | TVS_LINESATROOT | TVS_HASLINES /*| TVS_DISABLEDRAGDROP*/ );
+	LONG lStyle = GetWindowLong(m_hWnd, GWL_STYLE);
+	SetWindowLong(m_hWnd, GWL_STYLE, lStyle | TVS_HASBUTTONS | TVS_LINESATROOT | TVS_HASLINES /*| TVS_DISABLEDRAGDROP*/ );
 	
 	//创建ImageList
 	m_ImageList.Create(16,16,ILC_COLOR32,16,16);
@@ -48,7 +48,7 @@ void CFileResTree::Initial()
 	int iComputerIcon = m_ImageList.Add(
 		ExtractIcon( AfxGetApp()->m_hInstance, "shell32.dll", 15));
 	SetImageList(&m_ImageList,TVSIL_NORMAL);//设置TreeCtrl与ImageList关联
-	m_hRoot = this->InsertItem(_T("我的电脑"),iComputerIcon,iComputerIcon,TVI_ROOT);
+	m_hRoot = InsertItem(_T("我的电脑"),iComputerIcon,iComputerIcon,TVI_ROOT);
 	
 	GetLogicalDrives(m_hRoot);//获取本地驱动器加载到目录树
 	GetDriveDir(m_hRoot);//获取驱动器下一级文件夹到目录树
@@ -123,7 +123,7 @@ HTREEITEM CFileResTree::FindItem(HTREEITEM itemCurrent,CString strPath)
 	//遍历查找
 	while(itemCurrent != NULL) 
 	{   
-		CString curDir = this->GetItemText(itemCurrent);//当前节点的名称
+		CString curDir = GetItemText(itemCurrent);//当前节点的名称
 		//去除最右边的"\"
 		if(curDir.Right(1) == "\\")
 		{
@@ -136,9 +136,9 @@ HTREEITEM CFileResTree::FindItem(HTREEITEM itemCurrent,CString strPath)
 			if(curDir.CompareNoCase(strPath) == 0)
 				return itemCurrent; 
 			//否则，继续往下找子节点
-			else if(this->ItemHasChildren(itemCurrent))
+			else if(ItemHasChildren(itemCurrent))
 			{
-				itemCurrent = this->GetChildItem(itemCurrent); 
+				itemCurrent = GetChildItem(itemCurrent); 
 				//递归调用查找子节点下节点
 				CString sPathNew  = strPath.Mid(pos+1);
 				hfind = FindItem(itemCurrent,sPathNew);
@@ -153,14 +153,14 @@ HTREEITEM CFileResTree::FindItem(HTREEITEM itemCurrent,CString strPath)
 		else
 		{
 			//有兄弟节点，查找兄弟节点
-			if(this->GetNextSiblingItem(itemCurrent) != NULL)
+			if(GetNextSiblingItem(itemCurrent) != NULL)
 			{
-				itemCurrent = this->GetNextSiblingItem(itemCurrent);
+				itemCurrent = GetNextSiblingItem(itemCurrent);
 			}
 			//若无兄弟节点，继续查找子节点
-			else if(this->ItemHasChildren(itemCurrent))
+			else if(ItemHasChildren(itemCurrent))
 			{
-				itemCurrent = this->GetChildItem(itemCurrent); 
+				itemCurrent = GetChildItem(itemCurrent); 
 			}
 			else
 				return NULL;//未查找到 
@@ -184,8 +184,16 @@ HTREEITEM CFileResTree::InsertItemToTree(HTREEITEM hParent, CString strPath,CStr
 	SHGetFileInfo(strPath,0,&fileInfo,sizeof(&fileInfo),SHGFI_ICON|SHGFI_DISPLAYNAME|SHGFI_TYPENAME);
 	int iIcon = m_ImageList.Add(fileInfo.hIcon);
 	TRACE0("添加:" + strPath + "\n");
-	return this->InsertItem(DisplayName,iIcon,iIcon,hParent);
-	//return this->InsertItem(fileInfo.szDisplayName,iIcon,iIcon,hParent);
+	HTREEITEM itemNew = InsertItem(DisplayName,iIcon,iIcon,hParent);
+
+	DWORD dData = TYPE_EMPTY;//默认是空目录
+	if(IsDirHasSubDir(strPath))
+		dData = TYPE_HASINVALIDSUBITEM;//该目录下含有有效的子目录
+	SetItemData(itemNew,dData);
+
+	SetItemData(hParent,TYPE_HASVALIDSUBITEM);
+
+	return itemNew;
 }
 
 // 获取盘符到目录树，作为根目录下一级节点
@@ -202,7 +210,8 @@ void CFileResTree::GetLogicalDrives(HTREEITEM hRoot)
 	size_t szDriveString = _tcslen(pTempDrive);
 	while(szDriveString>0)
 	{
-		InsertItemToTree(hRoot,pTempDrive,pTempDrive);
+		HTREEITEM hItem = InsertItemToTree(hRoot,pTempDrive,pTempDrive);
+		
 		pTempDrive += szDriveString + 1;
 		szDriveString = _tcslen(pTempDrive);
 	}
@@ -212,13 +221,13 @@ void CFileResTree::GetLogicalDrives(HTREEITEM hRoot)
 // 获取驱动器下一级目录到目录树上显示
 void CFileResTree::GetDriveDir(HTREEITEM hRoot)
 {
-	if (this->ItemHasChildren(hRoot))
+	if (ItemHasChildren(hRoot))
 	{
-		HTREEITEM hChild = this->GetChildItem(hRoot);//获取根节点下的第一个盘符节点
+		HTREEITEM hChild = GetChildItem(hRoot);//获取根节点下的第一个盘符节点
 		while(hChild)
 		{
 			//获取查找路径
-			CString strPath = this->GetItemText(hChild);//获取节点的文字
+			CString strPath = GetItemText(hChild);//获取节点的文字
 			if(!strPath.IsEmpty() && strPath.Right(1) != _T("\\"))
 			{
 				strPath += _T("\\");
@@ -237,7 +246,7 @@ void CFileResTree::GetDriveDir(HTREEITEM hRoot)
 				}
 			}
 			//到下一个驱动器
-			hChild = this->GetNextItem(hChild,TVGN_NEXT);
+			hChild = GetNextItem(hChild,TVGN_NEXT);
 		}
 	}
 }
@@ -266,20 +275,80 @@ void CFileResTree::AddSubDir(HTREEITEM hParent)
 }
 
 // 获取某节点的文件路径
-CString CFileResTree::GetFullPath(HTREEITEM hCurrent)
+CString CFileResTree::GetFullPath(HTREEITEM hParent)
 {
 	CString strTemp = _T("");
 	CString strFullPath = _T("");
-	while(hCurrent != m_hRoot)
+	while(hParent != m_hRoot)
 	{
 		//从当前节点找起，依次找出其父节点，到根节点结束
-		strTemp = this->GetItemText(hCurrent);
+		strTemp = GetItemText(hParent);
 		if(strTemp.Right(1) != _T("\\"))
 			strTemp += _T("\\");
 		strFullPath = strTemp + strFullPath;
-		hCurrent = this->GetParentItem(hCurrent);
+		hParent = GetParentItem(hParent);
 	}
 	return strFullPath;
+}
+
+
+//展开指定节点
+void CFileResTree::ExpandItem(HTREEITEM hParent)
+{	
+	if(ItemHasChildren(hParent))//已有子节点
+	{
+		if(TYPE_HASVALIDSUBITEM == GetItemData(hParent))//该子节点含有有效子节点
+		{
+			HTREEITEM hChild = GetChildItem(hParent);
+			//轮训展开节点的每个子节点
+			while(hChild != NULL)
+			{
+				//该节点的类型是含有一个无效节点的类型，且节点不含有子节点，那么就给它添加一个空节点
+				if( TYPE_HASINVALIDSUBITEM == GetItemData(hChild)
+					&& !ItemHasChildren(hChild))
+				{
+					HTREEITEM itemEmpty = InsertItem( "",hChild);//添加空子目录，用来显示前面的"+"
+					SetItemData(itemEmpty,TYPE_INVALID);
+				}
+				hChild = GetNextItem(hChild,TVGN_NEXT);//转到下一个子节点
+			}
+		}
+		else if(TYPE_HASINVALIDSUBITEM == GetItemData(hParent))//该节点的类型是含有一个无效节点的类型
+		{
+			HTREEITEM hChild = GetChildItem(hParent);
+			if(hChild && TYPE_INVALID == GetItemData(hChild))//子节点是无效的空节点
+				DeleteItem(hChild);//删除无效的空子节点
+			
+			//添加所有的子目录
+			CString strPath = GetFullPath(hParent);
+			if(strPath.Right(1) != _T("\\"))
+			{
+				strPath += _T("\\");
+			}
+			CString sFind = strPath + _T("*.*");
+			CFileFind fileFind;
+			BOOL bContinue = fileFind.FindFile(sFind);
+			while(bContinue)
+			{
+				bContinue = fileFind.FindNextFile();
+				if(fileFind.IsDirectory() && !fileFind.IsDots() && !fileFind.IsHidden())
+				{
+					CString sname = fileFind.GetFileName();
+					TRACE0("添加:" + strPath+sname + "\n");
+					//添加节点
+					HTREEITEM hItenSub = InsertItemToTree(hParent,strPath+sname,sname);
+					//如果该节点类型是含有一个无效子节点，先添加一个空节点，以显示该节点前的"+"
+					if( TYPE_HASINVALIDSUBITEM == GetItemData(hItenSub) 
+						&& !ItemHasChildren(hItenSub))
+					{
+						HTREEITEM itemEmpty = InsertItem( "",hItenSub);//添加空子目录，用来显示前面的"+"
+						SetItemData(itemEmpty,TYPE_INVALID);
+					}
+				}
+			}
+			SetItemData(hParent,TYPE_HASVALIDSUBITEM);
+		}
+	}
 }
 /////////////////////////////////////////////////////////////////////////////
 // CFileResTree message handlers
@@ -297,67 +366,72 @@ void CFileResTree::OnItemexpanded(NMHDR* pNMHDR, LRESULT* pResult)
 		return;
 	
 /*
+方法1
 展开一个节点，就给该节点下所有子节点再添加一层子节点。
 收起一个节点，就把该节点下所有子节点的子节点删除。
 这样，就保证每个选中的节点含有一层子目录。
 缺点：左侧树形列表中，展开某个节点，如果节点下的子节点过多，则非常慢，可能假死。因为子节点的子节点会非常多，添加起来比较慢。
 */
-	CString sText = this->GetFullPath(item.hItem);
-	TRACE0("当前目录:" + sText + "\n");
-	if(this->ItemHasChildren(item.hItem))
-	{
-		HTREEITEM hChild = this->GetChildItem(item.hItem);
-		sText = this->GetFullPath(hChild);
-		TRACE0("收起子目录:" + sText + "\n");
-		if(pNMTreeView->action == 1)  //收起
-		{	
-			//删除所有子节点下的子节点
-			while(hChild!=NULL)
-			{
-				sText = this->GetFullPath(hChild);
-				TRACE0("收起子目录:" + sText + "\n");
-				while(this->ItemHasChildren(hChild))
-				{
-					HTREEITEM item = this->GetChildItem(hChild);
-					sText = this->GetFullPath(item);
-					TRACE0("删除:" + sText + "\n");
-					this->DeleteItem(item);
-				}
-				hChild = this->GetNextItem(hChild,TVGN_NEXT);
-			}
-		}
-		else if(pNMTreeView->action == 2) //展开
-		{
-			//轮训展开节点的每个子节点，加载文件目录信息到子节点上
-			//如果子节点过多，则非常慢，可能假死。因为子子节点的子节点可能会非常多，添加起来比较慢。
-			while(hChild != NULL)
-			{
-				sText = this->GetFullPath(hChild);
-				TRACE0("展开子目录:" + sText + "\n");
-				AddSubDir(hChild);
-				hChild = this->GetNextItem(hChild,TVGN_NEXT);
-			}
-		}
-	}
-	
-// 	if(pNMTreeView->action == 1)  //收起
+// 	CString sText = GetFullPath(item.hItem);
+// 	TRACE0("当前目录:" + sText + "\n");
+// 	if(ItemHasChildren(item.hItem))
 // 	{
-// 		if(this->ItemHasChildren(item.hItem))
-// 			this->Expand(item.hItem,TVE_COLLAPSE);
-// 	}
-// 	else if(pNMTreeView->action == 2) //展开
-// 	{
-// 		if(!this->ItemHasChildren(item.hItem))
+// 		HTREEITEM hChild = GetChildItem(item.hItem);
+// 		sText = GetFullPath(hChild);
+// 		TRACE0("收起子目录:" + sText + "\n");
+// 		if(pNMTreeView->action == 1)  //收起
+// 		{	
+// 			//删除所有子节点下的子节点
+// 			while(hChild!=NULL)
+// 			{
+// 				sText = GetFullPath(hChild);
+// 				TRACE0("收起子目录:" + sText + "\n");
+// 				while(ItemHasChildren(hChild))
+// 				{
+// 					HTREEITEM item = GetChildItem(hChild);
+// 					sText = GetFullPath(item);
+// 					TRACE0("删除:" + sText + "\n");
+// 					DeleteItem(item);
+// 				}
+// 				hChild = GetNextItem(hChild,TVGN_NEXT);
+// 			}
+// 		}
+// 		else if(pNMTreeView->action == 2) //展开
 // 		{
-// 			HTREEITEM hChild = this->GetChildItem(item.hItem);
 // 			//轮训展开节点的每个子节点，加载文件目录信息到子节点上
+// 			//如果子节点过多，则非常慢，可能假死。因为子子节点的子节点可能会非常多，添加起来比较慢。
 // 			while(hChild != NULL)
 // 			{
+// 				sText = GetFullPath(hChild);
+// 				TRACE0("展开子目录:" + sText + "\n");
 // 				AddSubDir(hChild);
-// 				hChild = this->GetNextItem(hChild,TVGN_NEXT);
+// 				hChild = GetNextItem(hChild,TVGN_NEXT);
 // 			}
 // 		}
 // 	}
+
+
+
+/*
+方法2
+展开一个节点，判断该节点下是否有子节点，如果没有子节点，表示该目录下下没有目录了；
+如果有子节点，那么判断是否是空子节点。如果是空子节点，表示该目录不是空目录，先删除该空子节点，然后将该目录下所有的子目录添加到该子节点下
+如果不是空子节点，表示子节点已经添加了下代子节点。
+收起一个节点，不用做任何事。
+该方法速度快多了。
+*/
+	
+// 	if(pNMTreeView->action == 1)  //收起
+// 	{
+// 		if(ItemHasChildren(item.hItem))
+// 			Expand(item.hItem,TVE_COLLAPSE);
+// 	}
+	/*else */	
+	if(pNMTreeView->action == 2) //展开
+	{
+		HTREEITEM hParent = item.hItem;
+		ExpandItem(hParent);
+	}
 	
 	*pResult = 0;
 }
@@ -424,4 +498,29 @@ void CFileResTree::OnSelchanged(NMHDR* pNMHDR, LRESULT* pResult)
 	}
 	
 	*pResult = 0;
+}
+
+
+
+
+//指定的目录是否为空
+bool CFileResTree::IsDirHasSubDir(CString strPath)
+{
+	int nCnt = 0;
+	if(strPath.Right(1) != _T("\\"))
+	{
+		strPath += _T("\\");
+	}
+	CString sFind = strPath + _T("*.*");
+	CFileFind fileFind;
+	BOOL bContinue = fileFind.FindFile(sFind);
+	while(bContinue)
+	{
+		bContinue = fileFind.FindNextFile();
+		if(fileFind.IsDirectory() && !fileFind.IsDots() && !fileFind.IsHidden())
+		{
+			return true;//只要有一个子目录，就返回true
+		}
+	}
+	return false;
 }

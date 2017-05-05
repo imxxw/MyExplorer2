@@ -49,7 +49,10 @@ protected:
 	void AddSubDir(HTREEITEM hParent);
 	
 	// 获取某节点的文件路径
-	CString GetFullPath(HTREEITEM hCurrent);
+	CString GetFullPath(HTREEITEM hParent);
+
+	//展开指定节点
+	void ExpandItem(HTREEITEM hParent);
 
 // Overrides
 	// ClassWizard generated virtual function overrides
@@ -70,6 +73,13 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 private:
+	//节点类型，保存在节点itemdata中
+	enum ITEM_TYPE
+	{
+		TYPE_INVALID = -1,           //该节点是无效节点，将会被删除
+			TYPE_EMPTY = 0,          //该节点不含子节点（不含目录）
+			TYPE_HASINVALIDSUBITEM,  //该节点含有一个无效节点的节点，表示该目录下含子目录，但是目前只添加了一个空的子目录
+			TYPE_HASVALIDSUBITEM};   //该节点含有一个或多个有效节点
 	
 	CImageList m_ImageList;//图标列表
 	
@@ -78,6 +88,12 @@ private:
 	CFileResList* m_lstRight;
 
 	CEdit* m_edtAddress;
+
+public:
+
+	//指定的目录是否含有子目录
+	static bool IsDirHasSubDir(CString strPath);
+
 };
 
 /////////////////////////////////////////////////////////////////////////////
