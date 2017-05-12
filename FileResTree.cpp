@@ -18,6 +18,10 @@ CFileResTree::CFileResTree()
 {
 	m_lstRight = NULL;
 	m_edtAddress = NULL;
+
+	m_bShowDirOnly = FALSE;//只显示文件夹
+	m_bShowHide = FALSE;//显示隐藏文件（夹）
+	m_bShowSystem = FALSE;//显示系统文件
 }
 
 CFileResTree::~CFileResTree()
@@ -33,7 +37,7 @@ ON_NOTIFY_REFLECT(TVN_SELCHANGED, OnSelchanged)
 END_MESSAGE_MAP()
 
 
-//初始化，一般在创建该控件被创建后调用
+//初始化，在创建该控件被创建后调用
 void CFileResTree::Initial()
 {	
 	//设置外观样式
@@ -58,7 +62,7 @@ void CFileResTree::Initial()
 
 
 //采用深度遍历树来查找对应的节点
-//很有可能查不到，因为树中没有保存所有的节点
+//很有可能查不到，因为树并不完整，没有保存所有的节点
 HTREEITEM CFileResTree::FindItemText(HTREEITEM itemCurrent, CString strtext) 
 { 	
 	//空树，直接返回NULL
@@ -183,11 +187,11 @@ HTREEITEM CFileResTree::InsertItemToTree(HTREEITEM hParent, CString strPath,CStr
 	SHFILEINFO fileInfo;
 	SHGetFileInfo(strPath,0,&fileInfo,sizeof(&fileInfo),SHGFI_ICON|SHGFI_DISPLAYNAME|SHGFI_TYPENAME);
 	int iIcon = m_ImageList.Add(fileInfo.hIcon);
-	TRACE0("添加:" + strPath + "\n");
 	HTREEITEM itemNew = InsertItem(DisplayName,iIcon,iIcon,hParent);
+	TRACE0("添加:" + strPath + "\n");
 
 	DWORD dData = TYPE_EMPTY;//默认是空目录
-	if(IsDirHasSubDir(strPath))
+	if(IsDirHasChildren(strPath))
 		dData = TYPE_HASINVALIDSUBITEM;//该目录下含有有效的子目录
 	SetItemData(itemNew,dData);
 
@@ -239,7 +243,15 @@ void CFileResTree::GetDriveDir(HTREEITEM hRoot)
 			{
 				bContinue = fileFind.FindNextFile();
 				//磁盘下的文件是目录并且不是[.]或[..]的时候，加载到目录树
-				if(fileFind.IsDirectory() && !fileFind.IsDots())
+				BOOL bAdd = !fileFind.IsDots();
+				if(m_bShowDirOnly)
+					bAdd = bAdd && fileFind.IsDirectory();//只显示目录
+				if(!m_bShowHide)
+					bAdd = bAdd && !fileFind.IsHidden();//不显示隐藏
+				if(!m_bShowSystem)
+					bAdd = bAdd && !fileFind.IsSystem();//不显示系统
+
+				if(bAdd)
 				{
 					CString sname = fileFind.GetFileName();
 					InsertItemToTree(hChild, strPath+sname, sname);
@@ -331,7 +343,17 @@ void CFileResTree::ExpandItem(HTREEITEM hParent)
 			while(bContinue)
 			{
 				bContinue = fileFind.FindNextFile();
-				if(fileFind.IsDirectory() && !fileFind.IsDots() && !fileFind.IsHidden())
+
+				BOOL bAdd = !fileFind.IsDots();
+				if(m_bShowDirOnly)
+					bAdd = bAdd && fileFind.IsDirectory();//只显示目录
+				if(!m_bShowHide)
+					bAdd = bAdd && !fileFind.IsHidden();//不显示隐藏
+				if(!m_bShowSystem)
+					bAdd = bAdd && !fileFind.IsSystem();//不显示系统
+
+				//if(fileFind.IsDirectory() && !fileFind.IsDots() && !fileFind.IsHidden())
+				if(bAdd)
 				{
 					CString sname = fileFind.GetFileName();
 					TRACE0("添加:" + strPath+sname + "\n");
@@ -350,6 +372,33 @@ void CFileResTree::ExpandItem(HTREEITEM hParent)
 		}
 	}
 }
+
+
+
+//删除指定节点下的所有子节点
+void CFileResTree::DeleteChildItems(HTREEITEM hParent)
+{
+	if(hParent == m_hRoot)
+		return;
+	
+	//删除子节点下的所有子节点
+	while(ItemHasChildren(hParent))
+	{
+		HTREEITEM hChild = GetChildItem(hParent);
+		CString sText = GetFullPath(hChild);
+		TRACE0("删除:" + sText + "\n");
+		DeleteItem(hChild);
+	}
+	
+	CString sItemPath = GetFullPath(hParent);
+	DWORD dData = TYPE_EMPTY;
+	if(IsDirHasChildren(sItemPath))
+		dData = TYPE_HASINVALIDSUBITEM;//该目录下含有有效的子目录
+	SetItemData(hParent,dData);
+	
+	HTREEITEM itemEmpty = InsertItem( "",hParent);//添加空子目录，用来显示前面的"+"
+	SetItemData(itemEmpty,TYPE_INVALID);
+}
 /////////////////////////////////////////////////////////////////////////////
 // CFileResTree message handlers
 
@@ -364,69 +413,20 @@ void CFileResTree::OnItemexpanded(NMHDR* pNMHDR, LRESULT* pResult)
 	//如果当前展开节点为根节点,则返回
 	if(item.hItem == m_hRoot)
 		return;
-	
-/*
-方法1
-展开一个节点，就给该节点下所有子节点再添加一层子节点。
-收起一个节点，就把该节点下所有子节点的子节点删除。
-这样，就保证每个选中的节点含有一层子目录。
-缺点：左侧树形列表中，展开某个节点，如果节点下的子节点过多，则非常慢，可能假死。因为子节点的子节点会非常多，添加起来比较慢。
-*/
-// 	CString sText = GetFullPath(item.hItem);
-// 	TRACE0("当前目录:" + sText + "\n");
-// 	if(ItemHasChildren(item.hItem))
-// 	{
-// 		HTREEITEM hChild = GetChildItem(item.hItem);
-// 		sText = GetFullPath(hChild);
-// 		TRACE0("收起子目录:" + sText + "\n");
-// 		if(pNMTreeView->action == 1)  //收起
-// 		{	
-// 			//删除所有子节点下的子节点
-// 			while(hChild!=NULL)
-// 			{
-// 				sText = GetFullPath(hChild);
-// 				TRACE0("收起子目录:" + sText + "\n");
-// 				while(ItemHasChildren(hChild))
-// 				{
-// 					HTREEITEM item = GetChildItem(hChild);
-// 					sText = GetFullPath(item);
-// 					TRACE0("删除:" + sText + "\n");
-// 					DeleteItem(item);
-// 				}
-// 				hChild = GetNextItem(hChild,TVGN_NEXT);
-// 			}
-// 		}
-// 		else if(pNMTreeView->action == 2) //展开
-// 		{
-// 			//轮训展开节点的每个子节点，加载文件目录信息到子节点上
-// 			//如果子节点过多，则非常慢，可能假死。因为子子节点的子节点可能会非常多，添加起来比较慢。
-// 			while(hChild != NULL)
-// 			{
-// 				sText = GetFullPath(hChild);
-// 				TRACE0("展开子目录:" + sText + "\n");
-// 				AddSubDir(hChild);
-// 				hChild = GetNextItem(hChild,TVGN_NEXT);
-// 			}
-// 		}
-// 	}
-
-
 
 /*
 方法2
-展开一个节点，判断该节点下是否有子节点，如果没有子节点，表示该目录下下没有目录了；
-如果有子节点，那么判断是否是空子节点。如果是空子节点，表示该目录不是空目录，先删除该空子节点，然后将该目录下所有的子目录添加到该子节点下
-如果不是空子节点，表示子节点已经添加了下代子节点。
-收起一个节点，不用做任何事。
-该方法速度快多了。
+收起节点，就删除该节点下的所有的子节点
+展开节点，重新加载所有子节点，保证了该节点下都是最新
+该方法速度快多了
 */
 	
-// 	if(pNMTreeView->action == 1)  //收起
-// 	{
-// 		if(ItemHasChildren(item.hItem))
-// 			Expand(item.hItem,TVE_COLLAPSE);
-// 	}
-	/*else */	
+	if(pNMTreeView->action == 1)  //收起
+	{
+		HTREEITEM hParent = item.hItem;
+		DeleteChildItems(hParent);
+	}
+	else	
 	if(pNMTreeView->action == 2) //展开
 	{
 		HTREEITEM hParent = item.hItem;
@@ -436,6 +436,7 @@ void CFileResTree::OnItemexpanded(NMHDR* pNMHDR, LRESULT* pResult)
 	*pResult = 0;
 }
 
+//选择改变，关联的列表框和地址栏都相应的改变
 void CFileResTree::OnSelchanged(NMHDR* pNMHDR, LRESULT* pResult) 
 {	
 	LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
@@ -470,7 +471,14 @@ void CFileResTree::OnSelchanged(NMHDR* pNMHDR, LRESULT* pResult)
 		while(bContinue)
 		{
 			bContinue = fileFind.FindNextFile();
-			if(/*!fileFind.IsDirectory() && */!fileFind.IsDots()&&!fileFind.IsHidden())
+			BOOL bAdd = !fileFind.IsDots();
+// 			if(m_bShowDirOnly)
+// 				bAdd = bAdd && fileFind.IsDirectory();//只显示目录
+			if(!m_bShowHide)
+				bAdd = bAdd && !fileFind.IsHidden();//不显示隐藏
+			if(!m_bShowSystem)
+				bAdd = bAdd && !fileFind.IsSystem();//不显示系统
+			if(bAdd)
 			{
 				SHFILEINFO fileInfo;
 				CString tempPath = strDirPath;
@@ -501,10 +509,8 @@ void CFileResTree::OnSelchanged(NMHDR* pNMHDR, LRESULT* pResult)
 }
 
 
-
-
-//指定的目录是否为空
-bool CFileResTree::IsDirHasSubDir(CString strPath)
+//指定的目录是否含子文件或目录
+bool CFileResTree::IsDirHasChildren(CString strPath)
 {
 	int nCnt = 0;
 	if(strPath.Right(1) != _T("\\"))
@@ -517,10 +523,45 @@ bool CFileResTree::IsDirHasSubDir(CString strPath)
 	while(bContinue)
 	{
 		bContinue = fileFind.FindNextFile();
-		if(fileFind.IsDirectory() && !fileFind.IsDots() && !fileFind.IsHidden())
+
+		BOOL bAdd = !fileFind.IsDots();
+		if(m_bShowDirOnly)
+			bAdd = bAdd && fileFind.IsDirectory();//只显示目录
+		if(!m_bShowHide)
+			bAdd = bAdd && !fileFind.IsHidden();//不显示隐藏
+		if(!m_bShowSystem)
+			bAdd = bAdd && !fileFind.IsSystem();//不显示系统
+
+		//if(fileFind.IsDirectory() && !fileFind.IsDots() && !fileFind.IsHidden())
+		if(bAdd)
 		{
 			return true;//只要有一个子目录，就返回true
 		}
 	}
+	fileFind.Close();
 	return false;
+}
+
+
+//指定的目录是否为空
+bool CFileResTree::IsDirEmpty(CString strPath)
+{
+	int nCnt = 0;
+	if(strPath.Right(1) != _T("\\"))
+	{
+		strPath += _T("\\");
+	}
+	CString sFind = strPath + _T("*.*");
+	CFileFind fileFind;
+	BOOL bContinue = fileFind.FindFile(sFind);
+	while(bContinue)
+	{
+		bContinue = fileFind.FindNextFile();
+		if(!fileFind.IsDots())
+		{
+			return false;//找到一个文件或文件夹，表示非空
+		}
+	}
+	fileFind.Close();
+	return true;
 }

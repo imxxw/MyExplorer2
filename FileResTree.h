@@ -53,6 +53,9 @@ protected:
 
 	//展开指定节点
 	void ExpandItem(HTREEITEM hParent);
+	
+	//删除指定节点下的所有子节点
+	void DeleteChildItems(HTREEITEM hParent);
 
 // Overrides
 	// ClassWizard generated virtual function overrides
@@ -89,11 +92,17 @@ private:
 
 	CEdit* m_edtAddress;
 
+	BOOL m_bShowDirOnly;//只显示文件夹
+	BOOL m_bShowHide;//显示隐藏文件（夹）
+	BOOL m_bShowSystem;//显示系统文件
+
 public:
 
-	//指定的目录是否含有子目录
-	static bool IsDirHasSubDir(CString strPath);
-
+	//指定的目录是否含有子文件或目录
+	bool IsDirHasChildren(CString strPath);
+	
+	//指定的目录是否为空
+	static bool IsDirEmpty(CString strPath);
 };
 
 /////////////////////////////////////////////////////////////////////////////
