@@ -113,6 +113,10 @@ SOURCE=.\MyExplorer2Dlg.cpp
 SOURCE=.\StdAfx.cpp
 # ADD CPP /Yc"stdafx.h"
 # End Source File
+# Begin Source File
+
+SOURCE=.\XTDirWatcher.cpp
+# End Source File
 # End Group
 # Begin Group "Header Files"
 
@@ -140,6 +144,10 @@ SOURCE=.\Resource.h
 # Begin Source File
 
 SOURCE=.\StdAfx.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\XTDirWatcher.h
 # End Source File
 # End Group
 # Begin Group "Resource Files"
