@@ -6,6 +6,56 @@
 --------------------Configuration: MyExplorer2 - Win32 Debug--------------------
 </h3>
 <h3>Command Lines</h3>
+Creating command line "rc.exe /l 0x804 /fo"Debug/MyExplorer2.res" /d "_DEBUG" /d "_AFXDLL" "D:\Srs\MyExplorer2\MyExplorer2.rc"" 
+Creating temporary file "C:\Users\XXW\AppData\Local\Temp\RSP6178.tmp" with contents
+[
+/nologo /MDd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_AFXDLL" /D "_MBCS" /FR"Debug/" /Fp"Debug/MyExplorer2.pch" /Yu"stdafx.h" /Fo"Debug/" /Fd"Debug/" /FD /GZ /c 
+"D:\Srs\MyExplorer2\DirWatcher.cpp"
+"D:\Srs\MyExplorer2\FileResList.cpp"
+"D:\Srs\MyExplorer2\FileResTree.cpp"
+"D:\Srs\MyExplorer2\MyExplorer2.cpp"
+"D:\Srs\MyExplorer2\MyExplorer2Dlg.cpp"
+"D:\Srs\MyExplorer2\ShellContextMenu.cpp"
+"D:\Srs\MyExplorer2\ShellPidl.cpp"
+"D:\Srs\MyExplorer2\ShellString.cpp"
+]
+Creating command line "cl.exe @C:\Users\XXW\AppData\Local\Temp\RSP6178.tmp" 
+Creating temporary file "C:\Users\XXW\AppData\Local\Temp\RSP6179.tmp" with contents
+[
+/nologo /MDd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_AFXDLL" /D "_MBCS" /FR"Debug/" /Fp"Debug/MyExplorer2.pch" /Yc"stdafx.h" /Fo"Debug/" /Fd"Debug/" /FD /GZ /c 
+"D:\Srs\MyExplorer2\StdAfx.cpp"
+]
+Creating command line "cl.exe @C:\Users\XXW\AppData\Local\Temp\RSP6179.tmp" 
+Creating temporary file "C:\Users\XXW\AppData\Local\Temp\RSP617A.tmp" with contents
+[
+/nologo /subsystem:windows /incremental:yes /pdb:"Debug/MyExplorer2.pdb" /debug /machine:I386 /out:"Debug/MyExplorer2.exe" /pdbtype:sept 
+.\Debug\DirWatcher.obj
+.\Debug\FileResList.obj
+.\Debug\FileResTree.obj
+.\Debug\MyExplorer2.obj
+.\Debug\MyExplorer2Dlg.obj
+.\Debug\ShellContextMenu.obj
+.\Debug\ShellPidl.obj
+.\Debug\ShellString.obj
+.\Debug\StdAfx.obj
+.\Debug\MyExplorer2.res
+]
+Creating command line "link.exe @C:\Users\XXW\AppData\Local\Temp\RSP617A.tmp"
+<h3>Output Window</h3>
+Compiling resources...
+Compiling...
+StdAfx.cpp
+Compiling...
+DirWatcher.cpp
+FileResList.cpp
+FileResTree.cpp
+MyExplorer2.cpp
+MyExplorer2Dlg.cpp
+ShellContextMenu.cpp
+ShellPidl.cpp
+ShellString.cpp
+Generating Code...
+Linking...
 
 
 

@@ -4,7 +4,7 @@
 #include "stdafx.h"
 #include "myexplorer2.h"
 #include "FileResTree.h"
-#include "XTDirWatcher.h"
+#include "DirWatcher.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -12,6 +12,9 @@
 static char THIS_FILE[] = __FILE__;
 #endif
 
+
+#define IDM_FIRST_SHELLMENUID	20000
+#define IDM_LAST_SHELLMENUID	(IDM_FIRST_SHELLMENUID+1000)
 /////////////////////////////////////////////////////////////////////////////
 // CFileResTree
 
@@ -25,6 +28,8 @@ CFileResTree::CFileResTree()
 	m_bShowSystem = FALSE;//显示系统文件
 	
 	m_pDirThread = NULL;
+
+	m_bContextMenu = TRUE;
 }
 
 CFileResTree::~CFileResTree()
@@ -38,9 +43,13 @@ CFileResTree::~CFileResTree()
 
 BEGIN_MESSAGE_MAP(CFileResTree, CTreeCtrl)
 //{{AFX_MSG_MAP(CFileResTree)
-ON_NOTIFY_REFLECT(TVN_ITEMEXPANDED, OnItemexpanded)
-ON_NOTIFY_REFLECT(TVN_SELCHANGED, OnSelchanged)
-ON_MESSAGE(XTWM_SHELL_NOTIFY, OnUpdateShell)
+	ON_NOTIFY_REFLECT(TVN_ITEMEXPANDED, OnItemexpanded)
+	ON_NOTIFY_REFLECT(TVN_SELCHANGED, OnSelchanged)
+	ON_MESSAGE(WM_XXW_SHELL_NOTIFY, OnUpdateShell)
+	ON_NOTIFY_REFLECT(NM_DBLCLK, OnDblclk)
+	ON_WM_CONTEXTMENU()
+	ON_NOTIFY_REFLECT(NM_RCLICK, OnRclick)
+	ON_COMMAND_RANGE(IDM_FIRST_SHELLMENUID, IDM_LAST_SHELLMENUID, OnShellCommand)
 //}}AFX_MSG_MAP
 END_MESSAGE_MAP()
 
@@ -50,7 +59,7 @@ void CFileResTree::Initial()
 {	
 	//设置外观样式
 	LONG lStyle = GetWindowLong(m_hWnd, GWL_STYLE);
-	SetWindowLong(m_hWnd, GWL_STYLE, lStyle | TVS_HASBUTTONS | TVS_LINESATROOT | TVS_HASLINES /*| TVS_DISABLEDRAGDROP*/ );
+	SetWindowLong(m_hWnd, GWL_STYLE, lStyle | TVS_HASBUTTONS /*| TVS_LINESATROOT*/ | TVS_HASLINES /*| TVS_DISABLEDRAGDROP*/ );
 	
 	//创建ImageList
 	m_ImageList.Create(16,16,ILC_COLOR32,16,16);
@@ -70,6 +79,13 @@ void CFileResTree::Initial()
 	Expand(m_hRoot, TVE_EXPAND);//展开根目录，显示所有的盘符
 }
 
+
+//获取当前选择的节点（目录或文件）的绝对路径
+CString CFileResTree::GetSelectedFullPath()
+{
+	HTREEITEM itemSel = GetSelectedItem();
+	return GetFullPath(itemSel);
+}
 
 //从某节点往下查找指定名称的节点
 //采用深度遍历树来查找对应的节点
@@ -207,12 +223,12 @@ HTREEITEM CFileResTree::InsertItemToTree(HTREEITEM hParent, CString strPath,CStr
 	HTREEITEM itemNew = InsertItem(DisplayName,iIcon,iIcon,hParent);
 	TRACE0("添加:" + strPath + "\n");
 	
-	DWORD dData = TYPE_EMPTY;//默认是空目录
-	if(IsDirHasChildren(strPath))
-		dData = TYPE_HASINVALIDSUBITEM;//该目录下含有有效的子目录
-	SetItemData(itemNew,dData);
-	
-	SetItemData(hParent,TYPE_HASVALIDSUBITEM);
+// 	DWORD dData = TYPE_EMPTY;//默认是空目录
+// 	if(IsDirHasChildren(strPath))
+// 		dData = TYPE_HASINVALIDSUBITEM;//该目录下含有有效的子目录
+// 	SetItemData(itemNew,dData);
+// 	
+// 	SetItemData(hParent,TYPE_HASVALIDSUBITEM);
 	
 	return itemNew;
 }
@@ -229,10 +245,9 @@ void CFileResTree::GetLogicalDrives(HTREEITEM hRoot)
 	//(为了最后可以释放驱动器字符串方便,如果直接移动字符串指针,后面调用delete释放字符串资源的时候会报错)
 	TCHAR* pTempDrive = pDriveStrings;//盘符
 	size_t szDriveString = _tcslen(pTempDrive);
-	while(szDriveString>0)
+	while(szDriveString > 0)
 	{
-		HTREEITEM hItem = InsertItemToTree(hRoot,pTempDrive,pTempDrive);
-		
+		HTREEITEM hItem = InsertItemToTree(hRoot,pTempDrive,pTempDrive);		
 		pTempDrive += szDriveString + 1;
 		szDriveString = _tcslen(pTempDrive);
 	}
@@ -304,97 +319,57 @@ void CFileResTree::DeleteChildItems(HTREEITEM hParent)
 	if(hParent == m_hRoot)
 		return;
 	
-	//删除子节点下的所有子节点
+	//删除子节点下的所有子节点(包括空的子节点)
 	while(ItemHasChildren(hParent))
 	{
 		HTREEITEM hChild = GetChildItem(hParent);
-		CString sText = GetFullPath(hChild);
-		TRACE0("删除:" + sText + "\n");
+		CString sPathChild = GetFullPath(hChild);
+		TRACE0("删除:" + sPathChild + "\n");
 		DeleteItem(hChild);
 	}
-	
-	CString sItemPath = GetFullPath(hParent);
-	DWORD dData = TYPE_EMPTY;
-	if(IsDirHasChildren(sItemPath))
-	{
-		dData = TYPE_HASINVALIDSUBITEM;//该目录下含有有效的子目录		
-		HTREEITEM itemEmpty = InsertItem( "",hParent);//添加空子目录，用来显示前面的"+"
-		SetItemData(itemEmpty,TYPE_INVALID);
-	}
-	SetItemData(hParent,dData);	
 }
 
 
 //初始化指定节点
 void CFileResTree::InitItem(HTREEITEM hParent)
 {	
-	if(ItemHasChildren(hParent))//已有子节点
-	{
-		if(TYPE_HASVALIDSUBITEM == GetItemData(hParent))//该子节点含有有效子节点
-		{
-			HTREEITEM hChild = GetChildItem(hParent);
-			//轮训展开节点的每个子节点
-			while(hChild != NULL)
-			{
-				//该节点的类型是含有一个无效节点的类型，且节点不含有子节点，那么就给它添加一个空节点
-				if( TYPE_HASINVALIDSUBITEM == GetItemData(hChild)
-					&& !ItemHasChildren(hChild))
-				{
-					HTREEITEM itemEmpty = InsertItem( "",hChild);//添加空子目录，用来显示前面的"+"
-					SetItemData(itemEmpty,TYPE_INVALID);
-				}
-				hChild = GetNextItem(hChild,TVGN_NEXT);//转到下一个子节点
-			}
-		}
-		else if(TYPE_HASINVALIDSUBITEM == GetItemData(hParent))//该节点的类型是含有一个无效节点的类型
-		{
+	if(hParent == m_hRoot)
+		return;
 
-			HTREEITEM hChild = GetChildItem(hParent);
-			if(hChild && TYPE_INVALID == GetItemData(hChild))//子节点是无效的空节点
-				DeleteItem(hChild);//删除无效的空子节点
+	//添加所有的子目录
+	CString sPathParent = GetFullPath(hParent);
+	if(sPathParent.Right(1) != _T("\\"))
+	{
+		sPathParent += _T("\\");
+	}
+	CString sFind = sPathParent + _T("*.*");
+	CFileFind fileFind;
+	BOOL bContinue = fileFind.FindFile(sFind);
+	BOOL bValid = FALSE;
+	while(bContinue)
+	{
+		bContinue = fileFind.FindNextFile();		
+		BOOL bAdd = !fileFind.IsDots();
+		if(m_bShowDirOnly)
+			bAdd = bAdd && fileFind.IsDirectory();//只显示目录
+		if(!m_bShowHide)
+			bAdd = bAdd && !fileFind.IsHidden();//不显示隐藏
+		if(!m_bShowSystem)
+			bAdd = bAdd && !fileFind.IsSystem();//不显示系统		
+		if(bAdd)
+		{
+			bValid = TRUE;
+			CString sname = fileFind.GetFileName();
+			CString sPathFull = fileFind.GetFilePath();
+			TRACE0("添加:" + sPathParent+sname + "\n");
+			//添加节点
+			HTREEITEM hItenSub = InsertItemToTree(hParent,sPathParent+sname,sname);
 			
-			//添加所有的子目录
-			CString strPath = GetFullPath(hParent);
-			if(strPath.Right(1) != _T("\\"))
+			//如果该节点类型是含有一个无效子节点，先添加一个空节点，以显示该节点前的"+"
+			if( IsDirHasChildren(sPathFull))
 			{
-				strPath += _T("\\");
+				HTREEITEM itemEmpty = InsertItem( "",hItenSub);//添加空子目录，用来显示前面的"+"
 			}
-			CString sFind = strPath + _T("*.*");
-			CFileFind fileFind;
-			BOOL bContinue = fileFind.FindFile(sFind);
-			BOOL bValid = FALSE;
-			while(bContinue)
-			{
-				bContinue = fileFind.FindNextFile();		
-				BOOL bAdd = !fileFind.IsDots();
-				if(m_bShowDirOnly)
-					bAdd = bAdd && fileFind.IsDirectory();//只显示目录
-				if(!m_bShowHide)
-					bAdd = bAdd && !fileFind.IsHidden();//不显示隐藏
-				if(!m_bShowSystem)
-					bAdd = bAdd && !fileFind.IsSystem();//不显示系统		
-				if(bAdd)
-				{
-					bValid = TRUE;
-					CString sname = fileFind.GetFileName();
-					TRACE0("添加:" + strPath+sname + "\n");
-					//添加节点
-					HTREEITEM hItenSub = InsertItemToTree(hParent,strPath+sname,sname);
-					
-					//如果该节点类型是含有一个无效子节点，先添加一个空节点，以显示该节点前的"+"
-					if( TYPE_HASINVALIDSUBITEM == GetItemData(hItenSub) 
-						&& !ItemHasChildren(hItenSub))
-					{
-						HTREEITEM itemEmpty = InsertItem( "",hItenSub);//添加空子目录，用来显示前面的"+"
-						SetItemData(itemEmpty,TYPE_INVALID);
-					}
-				}
-			}
-			
-			if(bValid)
-				SetItemData(hParent,TYPE_HASVALIDSUBITEM);
-			else		
-				SetItemData(hParent,TYPE_EMPTY);	
 		}
 	}
 }
@@ -402,8 +377,11 @@ void CFileResTree::InitItem(HTREEITEM hParent)
 
 //更新指定的节点
 void CFileResTree::UpdateItem(HTREEITEM itemCurrent)
-{
+{	
 	if(!itemCurrent)
+		return;
+
+	if(itemCurrent == m_hRoot)
 		return;
 	
 	//删除该节点的所有子项
@@ -412,81 +390,17 @@ void CFileResTree::UpdateItem(HTREEITEM itemCurrent)
 	InitItem(itemCurrent);
 }
 
-/////////////////////////////////////////////////////////////////////////////
-// CFileResTree message handlers
 
-void CFileResTree::OnItemexpanded(NMHDR* pNMHDR, LRESULT* pResult) 
+//更新相关联的控件
+void CFileResTree::UpdateRelatedCtrls()
 {
-	//NM_TREEVIEW* pNMTreeView = (NM_TREEVIEW*)pNMHDR;
-	// TODO: Add your control notification handler code here
-	LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
-	// TODO: 在此添加控件通知处理程序代码
-	TVITEM item = pNMTreeView->itemNew;//获取当前展开节点
-	HTREEITEM hIitemCurrent = item.hItem;//当前节点
-	
-	//如果当前展开节点为根节点,则返回
-	if(hIitemCurrent == m_hRoot)
-		return;
-	
-		/*
-		方法2
-		收起节点，就删除该节点下的所有的子节点
-		展开节点，重新加载所有子节点，保证了该节点下都是最新
-		该方法速度快多了
-	*/
-	
-	// 	if(pNMTreeView->action == 1)  //收起
-	// 	{
-	// 		DeleteChildItems(hIitemCurrent);
-	// 	}
-	//else
-	if(pNMTreeView->action == 2) //展开
-	{
-		UpdateItem(hIitemCurrent);
-	}
-	
-	*pResult = 0;
-}
-
-//选择改变，关联的列表框和地址栏都相应的改变
-void CFileResTree::OnSelchanged(NMHDR* pNMHDR, LRESULT* pResult) 
-{	
-	LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
-	// TODO: 在此添加控件通知处理程序代码
-	
 	HTREEITEM itemCurrent = GetSelectedItem();
 	CString sPath = GetFullPath(itemCurrent);//当前路径
 	
-	UpdateItem(itemCurrent);
-	
-	//采用监视线程来监测当前选择的目录
-	if (m_pDirThread == NULL)
-	{
-		m_pDirThread = (CXTDirWatcher*)AfxBeginThread(RUNTIME_CLASS(CXTDirWatcher),
-			THREAD_PRIORITY_LOWEST, 0, CREATE_SUSPENDED, NULL);
-		
-		//方法1 
-		CString sPath;//当前选择的目录
-		m_pDirThread->SetFolderPath(this, sPath);
-		m_pDirThread->ResumeThread();
-	}	
-	else
-	{
-		CString sFolderPath = m_pDirThread->GetFolderPath();
-		if (sFolderPath.CompareNoCase(sPath) != 0)
-		{
-			m_pDirThread->SuspendThread();
-			m_pDirThread->SetFolderPath(this, sPath);
-			m_pDirThread->ResumeThread();
-		}
-	}
-	
-	
 	//获取当前目录路径
-	TVITEM item = pNMTreeView->itemNew;
 	if(m_edtAddress)
 	{
-		if(item.hItem == m_hRoot)
+		if(itemCurrent == m_hRoot)
 		{
 			m_edtAddress->SetWindowText(_T(""));
 			return;
@@ -543,6 +457,66 @@ void CFileResTree::OnSelchanged(NMHDR* pNMHDR, LRESULT* pResult)
 			}
 		}
 	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// CFileResTree message handlers
+
+void CFileResTree::OnItemexpanded(NMHDR* pNMHDR, LRESULT* pResult) 
+{
+	//NM_TREEVIEW* pNMTreeView = (NM_TREEVIEW*)pNMHDR;
+	// TODO: Add your control notification handler code here
+	LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
+	// TODO: 在此添加控件通知处理程序代码
+	TVITEM item = pNMTreeView->itemNew;//获取当前展开节点
+	HTREEITEM hIitemCurrent = item.hItem;//当前节点
+	
+	//如果当前展开节点为根节点,则返回
+	if(hIitemCurrent == m_hRoot)
+		return;
+	
+	if(pNMTreeView->action == 2) //展开
+	{
+		UpdateItem(hIitemCurrent);
+	}
+	
+	*pResult = 0;
+}
+
+//选择改变，关联的列表框和地址栏都相应的改变
+void CFileResTree::OnSelchanged(NMHDR* pNMHDR, LRESULT* pResult) 
+{	
+	LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
+	// TODO: 在此添加控件通知处理程序代码
+	
+	HTREEITEM itemCurrent = GetSelectedItem();
+	CString sPath = GetFullPath(itemCurrent);//当前路径
+	
+	UpdateItem(itemCurrent);
+	
+	//采用监视线程来监测当前选择的目录
+	if (m_pDirThread == NULL)
+	{
+		m_pDirThread = (CDirWatcher*)AfxBeginThread(RUNTIME_CLASS(CDirWatcher),
+			THREAD_PRIORITY_LOWEST, 0, CREATE_SUSPENDED, NULL);
+		
+		//方法1 
+		CString sPath;//当前选择的目录
+		m_pDirThread->SetFolderPath(this, sPath);
+		m_pDirThread->ResumeThread();
+	}	
+	else
+	{
+		CString sFolderPath = m_pDirThread->GetFolderPath();
+		if (sFolderPath.CompareNoCase(sPath) != 0)
+		{
+			m_pDirThread->SuspendThread();
+			m_pDirThread->SetFolderPath(this, sPath);
+			m_pDirThread->ResumeThread();
+		}
+	}
+	
+	UpdateRelatedCtrls();
 	
 	*pResult = 0;
 }
@@ -609,14 +583,14 @@ bool CFileResTree::IsDirEmpty(CString strPath)
 LRESULT CFileResTree::OnUpdateShell(WPARAM wParam, LPARAM lParam)
 {
 	int nMessage = (int)wParam;
-	XT_TVITEMDATA* pItemData = (XT_TVITEMDATA*)lParam;
+	XXW_TVITEMDATA* pItemData = (XXW_TVITEMDATA*)lParam;
 	switch (nMessage)
 	{
-	case SHN_XT_REFRESHFOLDER:
-	case SHN_XT_REFRESHTREE:
+	case WM_XXW_REFRESHTREE:
 		{	
 			HTREEITEM itemCurrent = GetSelectedItem();
 			UpdateItem(itemCurrent);
+			UpdateRelatedCtrls();
 			break;
 		}
 	default:
@@ -624,4 +598,199 @@ LRESULT CFileResTree::OnUpdateShell(WPARAM wParam, LPARAM lParam)
 	}
 	
 	return 0;
+}
+
+
+void CFileResTree::OnDblclk(NMHDR* pNMHDR, LRESULT* pResult) 
+{
+	// TODO: Add your control notification handler code here
+	HTREEITEM itemCurrent = GetSelectedItem();
+	CString sPath = GetFullPath(itemCurrent);
+	
+	BOOL bIsFile;//是否是文件
+	CFileFind FileFind;
+	BOOL res = FileFind.FindFile(sPath);
+	if (res)
+	{
+		if (res = FileFind.FindNextFile())
+		{
+			if (!FileFind.IsDirectory() && !FileFind.IsDots())//如果是文件
+				bIsFile = TRUE;
+		}          
+	}
+	FileFind.Close();
+	
+	//如果是文件，调用系统命令打开该文件
+	if(bIsFile)
+		ShellExecute(NULL, NULL, sPath, NULL, NULL, SW_SHOWNORMAL);
+	
+	*pResult = 0;
+}
+
+
+void CFileResTree::OnRclick(NMHDR* /*pNMHDR*/, LRESULT* pResult)
+{
+	// Display the shell context menu.
+	if (m_bContextMenu == TRUE)
+	{
+// 		HTREEITEM hItem = GetContextMenu();
+// 		if (hItem != NULL)
+// 		{
+// 			// TODO: Additional error handling.
+// 		}
+		
+		CPoint pt(GetMessagePos());
+		SendMessage(WM_CONTEXTMENU, (WPARAM)m_hWnd, MAKELPARAM(pt.x, pt.y));	
+	}
+	
+	*pResult = 0;
+}
+
+HTREEITEM CFileResTree::GetContextMenu()
+{
+	// 	CPoint point;
+	// 	::GetCursorPos(&point);
+	// 	this->ScreenToClient(&point);
+	// 	
+	// 	TV_HITTESTINFO tvhti;
+	// 	tvhti.pt = point;
+	// 	this->HitTest(&tvhti);
+	// 	
+	// 	if (tvhti.flags & (TVHT_ONITEMLABEL | TVHT_ONITEMICON))
+	// 	{
+	// 		// Long pointer to TreeView item data
+	// 		XXW_TVITEMDATA*  lptvid = (XXW_TVITEMDATA*)this->GetItemData(tvhti.hItem);
+	// 		
+	// 		this->ClientToScreen(&point);
+	// 		
+	// 		if (lptvid->lpsfParent == NULL)
+	// 		{
+	// 			LPSHELLFOLDER lpShellFolder;
+	// 			if (FAILED(::SHGetDesktopFolder(&lpShellFolder)))
+	// 			{
+	// 				return NULL;
+	// 			}
+	// 			
+	// 			ShowContextMenu(this->m_hWnd,
+	// 				lpShellFolder, lptvid->lpi, &point);
+	// 			
+	// 			if (lpShellFolder)
+	// 			{
+	// 				lpShellFolder->Release();
+	// 			}
+	// 		}
+	// 		else
+	// 		{
+	// 			ShowContextMenu(this->m_hWnd,
+	// 				lptvid->lpsfParent, lptvid->lpi, &point);
+	// 		}
+	// 		
+	// 		return tvhti.hItem;
+	// 	}	
+	
+	return NULL;
+}
+
+BOOL CFileResTree::GetItemContextMenu(HTREEITEM hItem, CShellContextMenu& rCtxMenu)
+{
+	TVITEMDATA* pData = (TVITEMDATA*)GetItemData(hItem);
+	if (!pData->IsValid())
+		return FALSE;
+	
+	return rCtxMenu.Create(pData->pParentFolder, pData->pidlAbs.GetLastChild());
+}
+
+
+CMenu* CFileResTree::FindMenuItemByText(CMenu *pMenu, LPCTSTR pszText, UINT& nIndex, BOOL bRecursive)
+{
+	if (!::IsMenu(pMenu->GetSafeHmenu()))
+		return NULL;
+	
+	CString text;
+	UINT count = pMenu->GetMenuItemCount();
+	for (UINT id=0; id < count; id++)
+	{
+		if (pMenu->GetMenuString(id, text, MF_BYPOSITION) > 0
+			&& text == pszText)
+		{
+			nIndex = id;
+			return pMenu;
+		}
+		// search recursively in sub-menus
+		if (bRecursive && pMenu->GetMenuState(id, MF_BYPOSITION) & MF_POPUP)
+		{
+			CMenu *pSubMenu = FindMenuItemByText(pMenu->GetSubMenu(id),
+				pszText, nIndex, bRecursive);
+			if (pSubMenu != NULL)
+				return pSubMenu;
+		}
+	}
+	return NULL;
+}
+
+void CFileResTree::OnContextMenu(CWnd* pWnd, CPoint point) 
+{
+	if (pWnd->GetSafeHwnd() != m_hWnd)
+	{
+		Default();
+		return;
+	}
+	
+	// get clicked item
+	UINT nFlags = 0;
+	ScreenToClient(&point);
+	HTREEITEM hItemCurrent = HitTest(point, &nFlags);
+	
+	if (!(nFlags & TVHT_ONITEM))
+		return;
+	
+	// load menu
+	CMenu menu;
+	menu.LoadMenu(IDR_TESTMENU);
+	CMenu *pPopupMenu = menu.GetSubMenu(0);//获取菜单的第一列，其实总共也就一列
+	
+	//The GetAsyncKeyState function determines whether a key is up or down at the time the function is called, 
+	//and whether the key was pressed after a previous call to GetAsyncKeyState. 
+	// Ctrl key down, make a submenu
+	BOOL bPopup = (GetAsyncKeyState(VK_CONTROL) & 0x8000);
+	
+	// search insert position
+	UINT nInsertAt = 0;
+
+	CMenu *pMenu = FindMenuItemByText(pPopupMenu, _T("&Shell"), nInsertAt);
+	if (pMenu == NULL)
+	{
+		pMenu = pPopupMenu;
+		nInsertAt = 0;
+	}
+	else if (bPopup)
+	{
+		// add a separator
+		pMenu->InsertMenu(nInsertAt+1, MF_BYPOSITION|MF_SEPARATOR, 0);		
+		pMenu = pMenu->GetSubMenu(nInsertAt);
+		nInsertAt = 0;
+	}
+	pMenu->DeleteMenu(nInsertAt, MF_BYPOSITION);
+	
+	GetItemContextMenu(hItemCurrent, m_shellMenu);
+	if (!m_shellMenu.FillMenu(pMenu, nInsertAt, IDM_FIRST_SHELLMENUID,
+		IDM_LAST_SHELLMENUID, CMF_NODEFAULT|CMF_EXPLORE))
+	{
+		// no items added
+		if (bPopup)
+			pMenu->AppendMenu(MF_GRAYED, ID_SHELLMENU, _T("(empty)"));
+	}
+	
+	// display menu
+	m_shellMenu.SetOwner(this);
+	ClientToScreen(&point);
+	pPopupMenu->TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON,
+		point.x, point.y, this);
+	m_shellMenu.SetOwner(NULL);
+}
+
+void CFileResTree::OnShellCommand(UINT nID) 
+{
+	// shell command
+	m_shellMenu.InvokeCommand(nID);
 }

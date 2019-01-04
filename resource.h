@@ -7,10 +7,13 @@
 #define IDS_ABOUTBOX                    101
 #define IDD_MYEXPLORER2_DIALOG          102
 #define IDR_MAINFRAME                   128
+#define IDR_TESTMENU                    130
 #define IDC_TREE                        1000
 #define IDC_EDIT_ADD                    1001
 #define IDC_BTN_GOTO                    1002
 #define IDC_LIST                        1003
+#define ID_SHELLMENU                    32777
+
 
 // Next default values for new objects
 // 

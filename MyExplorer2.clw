@@ -2,29 +2,51 @@
 
 [General Info]
 Version=1
-LastClass=CFileResList
-LastTemplate=CListCtrl
+LastClass=CFileResTree
+LastTemplate=CDialog
 NewFileInclude1=#include "stdafx.h"
 NewFileInclude2=#include "myexplorer2.h"
 LastPage=0
 
-ClassCount=5
-Class1=CMyExplorer2App
-Class2=CAboutDlg
-Class3=CMyExplorer2Dlg
+ClassCount=6
+Class1=CDirWatcher
+Class2=CFileResList
+Class3=CFileResTree
+Class4=CMyExplorer2App
+Class5=CAboutDlg
+Class6=CMyExplorer2Dlg
 
-ResourceCount=2
+ResourceCount=3
 Resource1=IDD_ABOUTBOX
-Class4=CDirTree
-Class5=CFileResList
 Resource2=IDD_MYEXPLORER2_DIALOG
+Resource3=IDR_TESTMENU (English (U.S.))
+
+[CLS:CDirWatcher]
+Type=0
+BaseClass=CWinThread
+HeaderFile=DirWatcher.h
+ImplementationFile=DirWatcher.cpp
+
+[CLS:CFileResList]
+Type=0
+BaseClass=CListCtrl
+HeaderFile=FileResList.h
+ImplementationFile=FileResList.cpp
+
+[CLS:CFileResTree]
+Type=0
+BaseClass=CTreeCtrl
+HeaderFile=FileResTree.h
+ImplementationFile=FileResTree.cpp
+Filter=W
+VirtualFilter=GWC
+LastObject=CFileResTree
 
 [CLS:CMyExplorer2App]
 Type=0
 BaseClass=CWinApp
 HeaderFile=MyExplorer2.h
 ImplementationFile=MyExplorer2.cpp
-LastObject=CMyExplorer2App
 
 [CLS:CAboutDlg]
 Type=0
@@ -38,9 +60,6 @@ Type=0
 BaseClass=CDialog
 HeaderFile=MyExplorer2Dlg.h
 ImplementationFile=MyExplorer2Dlg.cpp
-LastObject=IDC_BTN_GOTO
-Filter=D
-VirtualFilter=dWC
 
 [DLG:IDD_ABOUTBOX]
 Type=1
@@ -61,21 +80,8 @@ Control3=IDC_EDIT_ADD,edit,1350631552
 Control4=IDC_BTN_GOTO,button,1342242817
 Control5=IDC_LIST,SysListView32,1350631441
 
-[CLS:CDirTree]
-Type=0
-HeaderFile=DirTree.h
-ImplementationFile=DirTree.cpp
-BaseClass=CTreeCtrl
-Filter=W
-LastObject=CDirTree
-VirtualFilter=GWC
-
-[CLS:CFileResList]
-Type=0
-HeaderFile=FileResList.h
-ImplementationFile=FileResList.cpp
-BaseClass=CListCtrl
-Filter=W
-VirtualFilter=FWC
-LastObject=CFileResList
+[MNU:IDR_TESTMENU (English (U.S.))]
+Type=1
+Class=?
+CommandCount=0
 
